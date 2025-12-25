@@ -126,6 +126,9 @@ CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='').split(',')
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
+# 是否启用人脸验证（创建讲师时验证上传照片是否为本人）
+FACE_VERIFY_ENABLED = config('FACE_VERIFY_ENABLED', default=True, cast=bool)
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer"

@@ -373,20 +373,26 @@ class SpeakersView(APIView):
             return MyResponse(code=400, error="未提供照片", status=status.HTTP_400_BAD_REQUEST)
         portrait_content = portrait.read()
 
-        user_photo_url = f"{settings.OAUTH2_USER_PHOTO_URL}?userId={request.user.username}"
-        oauth2_session = OAuth2Session(settings.OAUTH2_CLIENT_ID, token=request.session.get('oauth2_token'))
-        response = oauth2_session.get(user_photo_url)
-        if response.status_code != 200:
-            return MyResponse(code=400, error=f"获取用户头像失败", status=status.HTTP_400_BAD_REQUEST)
+        # 人脸验证（可通过 FACE_VERIFY_ENABLED 配置关闭）
+        if settings.FACE_VERIFY_ENABLED:
+            oauth2_token = request.session.get('oauth2_token')
+            if not oauth2_token:
+                return MyResponse(code=400, error="人脸验证需要 OAuth2 登录", status=status.HTTP_400_BAD_REQUEST)
+            
+            user_photo_url = f"{settings.OAUTH2_USER_PHOTO_URL}?userId={request.user.username}"
+            oauth2_session = OAuth2Session(settings.OAUTH2_CLIENT_ID, token=oauth2_token)
+            response = oauth2_session.get(user_photo_url)
+            if response.status_code != 200:
+                return MyResponse(code=400, error=f"获取用户头像失败", status=status.HTTP_400_BAD_REQUEST)
 
-        user_avatar = response.content
-        if not user_avatar:
-            return MyResponse(code=400, error="用户没有头像", status=status.HTTP_400_BAD_REQUEST)
+            user_avatar = response.content
+            if not user_avatar:
+                return MyResponse(code=400, error="用户没有头像", status=status.HTTP_400_BAD_REQUEST)
 
-        encoded_portrait = base64.b64encode(portrait_content).decode('utf-8')
-        encoded_user_avatar = base64.b64encode(user_avatar).decode('utf-8')
-        if not self._verify_face(encoded_portrait, encoded_user_avatar):
-            return MyResponse(code=400, error="人脸验证失败", status=status.HTTP_400_BAD_REQUEST)
+            encoded_portrait = base64.b64encode(portrait_content).decode('utf-8')
+            encoded_user_avatar = base64.b64encode(user_avatar).decode('utf-8')
+            if not self._verify_face(encoded_portrait, encoded_user_avatar):
+                return MyResponse(code=400, error="人脸验证失败", status=status.HTTP_400_BAD_REQUEST)
 
         random_suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         new_avatar = Avatar.objects.create(
