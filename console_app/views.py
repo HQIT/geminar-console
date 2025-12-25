@@ -85,12 +85,30 @@ def user_me_view(request):
 def get_user_me_portrait(request):
     user = request.user
     access_token = request.session.get('oauth2_token', {}).get('access_token')
+    
+    # 本地登录没有 OAuth2 token，返回默认头像
+    if not access_token:
+        return _default_portrait_response()
+    
     user_photo_url = f"{settings.OAUTH2_USER_PHOTO_URL}?userId={user.username}&access_token={access_token}"
-    response = requests.get(user_photo_url)
-    if response.status_code != 200:
-        return HttpResponse(status=response.status_code)
-    content_type = response.headers.get('Content-Type', 'application/unknown')
-    return HttpResponse(response.content, content_type=content_type)
+    try:
+        response = requests.get(user_photo_url, timeout=5)
+        if response.status_code != 200:
+            return _default_portrait_response()
+        content_type = response.headers.get('Content-Type', 'application/unknown')
+        return HttpResponse(response.content, content_type=content_type)
+    except:
+        return _default_portrait_response()
+
+
+def _default_portrait_response():
+    """返回默认头像 SVG"""
+    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="50" fill="#e0e0e0"/>
+        <circle cx="50" cy="38" r="18" fill="#9e9e9e"/>
+        <ellipse cx="50" cy="85" rx="30" ry="25" fill="#9e9e9e"/>
+    </svg>'''
+    return HttpResponse(svg, content_type='image/svg+xml')
 
 
 def home(request):
