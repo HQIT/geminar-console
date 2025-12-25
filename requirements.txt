@@ -1,0 +1,12 @@
+django
+djangorestframework
+python-decouple
+python-dotenv
+gunicorn
+requests
+requests-oauthlib
+Pillow
+channels
+websockets
+uvicorn
+

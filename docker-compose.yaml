@@ -1,0 +1,49 @@
+networks:
+  geminar-network:
+    external: true
+    name: geminar-network
+
+services:
+  geminar-console:
+    build: .
+    image: hqit/geminar-console:latest
+    ports:
+      - "8800:8000"
+    env_file:
+      - .env
+    volumes:
+      - console-medias:/app/medias
+      - ./db.sqlite3:/app/db.sqlite3  # 共享数据库
+    networks:
+      - geminar-network
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: hqit/geminar-frontend:latest
+    volumes:
+      - frontend-dist:/app/build
+    restart: no
+    networks:
+      - geminar-network
+
+  nginx:
+    image: dockerpull.org/nginx:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - frontend
+      - geminar-console
+    volumes:
+      - frontend-dist:/app/dist
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    restart: unless-stopped
+    networks:
+      - geminar-network
+
+volumes:
+  console-medias:
+    driver: local
+  frontend-dist:
+    driver: local
+
