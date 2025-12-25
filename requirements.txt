@@ -10,3 +10,4 @@ channels
 websockets
 uvicorn
 
+django-cors-headers

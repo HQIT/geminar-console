@@ -69,13 +69,13 @@ class UserSerializer(serializers.ModelSerializer):
 @permission_classes([IsAuthenticated])
 def user_me_view(request):
     user = request.user
+    # OAuth2 登录检查 token 是否过期
     if 'oauth2_token' in request.session:
         token = request.session['oauth2_token']
         token_expires_at = token.get('expires_at', 0)
         if token_expires_at < time.time():
             return MyResponse(code=401, error=f"token expired", status=status.HTTP_401_UNAUTHORIZED)
-    else:
-        return MyResponse(code=401, error="未登录", status=status.HTTP_401_UNAUTHORIZED)
+    # 本地登录：只要 user 已认证即可
 
     serializer = UserSerializer(user)
     return MyResponse(data=serializer.data)
