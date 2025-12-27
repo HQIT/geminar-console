@@ -18,5 +18,9 @@ urlpatterns = [
     path('speakers/<uuid:speaker_id>/', views.SpeakerDetailView.as_view(), name='speaker_detail'),
     path('voices/', views.VoicesView.as_view(), name='voices'),
     path('generation_orders/', views.GenerationOrdersView.as_view(), name='generation_orders'),
+    # TTS API
+    path('tts/orders/', views.TTSOrdersView.as_view(), name='tts_orders'),
+    path('tts/orders/<uuid:order_id>/', views.TTSOrderDetailView.as_view(), name='tts_order_detail'),
+    path('tts/orders/<uuid:order_id>/callback/', views.TTSOrderCallbackView.as_view(), name='tts_order_callback'),
 ]
 

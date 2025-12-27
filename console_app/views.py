@@ -18,10 +18,11 @@ from django.http import HttpResponse
 from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2 import BackendApplicationClient
 
-from .models import Seminar, Avatar, Speaker, Voice, GenerationOrder
+from .models import Seminar, Avatar, Speaker, Voice, GenerationOrder, TTSOrder
 from .serializers import (
     SeminarSerializer, AvatarSerializer, SpeakerSerializer,
-    AvatarDetailSerializer, VoiceSerializer, GenerationOrderSerializer
+    AvatarDetailSerializer, VoiceSerializer, GenerationOrderSerializer,
+    TTSOrderSerializer, TTSOrderCreateSerializer
 )
 
 import string
@@ -93,10 +94,10 @@ def get_user_me_portrait(request):
     user_photo_url = f"{settings.OAUTH2_USER_PHOTO_URL}?userId={user.username}&access_token={access_token}"
     try:
         response = requests.get(user_photo_url, timeout=5)
-        if response.status_code != 200:
+    if response.status_code != 200:
             return _default_portrait_response()
-        content_type = response.headers.get('Content-Type', 'application/unknown')
-        return HttpResponse(response.content, content_type=content_type)
+    content_type = response.headers.get('Content-Type', 'application/unknown')
+    return HttpResponse(response.content, content_type=content_type)
     except:
         return _default_portrait_response()
 
@@ -378,21 +379,21 @@ class SpeakersView(APIView):
             oauth2_token = request.session.get('oauth2_token')
             if not oauth2_token:
                 return MyResponse(code=400, error="人脸验证需要 OAuth2 登录", status=status.HTTP_400_BAD_REQUEST)
-            
-            user_photo_url = f"{settings.OAUTH2_USER_PHOTO_URL}?userId={request.user.username}"
+
+        user_photo_url = f"{settings.OAUTH2_USER_PHOTO_URL}?userId={request.user.username}"
             oauth2_session = OAuth2Session(settings.OAUTH2_CLIENT_ID, token=oauth2_token)
-            response = oauth2_session.get(user_photo_url)
-            if response.status_code != 200:
-                return MyResponse(code=400, error=f"获取用户头像失败", status=status.HTTP_400_BAD_REQUEST)
+        response = oauth2_session.get(user_photo_url)
+        if response.status_code != 200:
+            return MyResponse(code=400, error=f"获取用户头像失败", status=status.HTTP_400_BAD_REQUEST)
 
-            user_avatar = response.content
-            if not user_avatar:
-                return MyResponse(code=400, error="用户没有头像", status=status.HTTP_400_BAD_REQUEST)
+        user_avatar = response.content
+        if not user_avatar:
+            return MyResponse(code=400, error="用户没有头像", status=status.HTTP_400_BAD_REQUEST)
 
-            encoded_portrait = base64.b64encode(portrait_content).decode('utf-8')
-            encoded_user_avatar = base64.b64encode(user_avatar).decode('utf-8')
-            if not self._verify_face(encoded_portrait, encoded_user_avatar):
-                return MyResponse(code=400, error="人脸验证失败", status=status.HTTP_400_BAD_REQUEST)
+        encoded_portrait = base64.b64encode(portrait_content).decode('utf-8')
+        encoded_user_avatar = base64.b64encode(user_avatar).decode('utf-8')
+        if not self._verify_face(encoded_portrait, encoded_user_avatar):
+            return MyResponse(code=400, error="人脸验证失败", status=status.HTTP_400_BAD_REQUEST)
 
         random_suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         new_avatar = Avatar.objects.create(
@@ -422,6 +423,29 @@ class VoicesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """
+        获取可用音色列表。
+        
+        Query params:
+            source: 数据源，'tts' 从 TTS 服务获取，默认从数据库
+        """
+        source = request.query_params.get('source', 'db')
+        
+        if source == 'tts':
+            # 从 TTS 服务获取
+            try:
+                from dataclasses import asdict
+                from text_to_speech import StreamTTSProvider
+                provider = StreamTTSProvider()
+                voices = provider.list_voices()
+                data = [asdict(v) for v in voices]
+                return MyResponse(data=data)
+            except ImportError:
+                return MyResponse(code=500, error="TTS 功能未启用", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                return MyResponse(code=500, error=str(e), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # 默认从数据库获取
         voices = Voice.objects.all()
         serializer = VoiceSerializer(voices, many=True)
         return MyResponse(data=serializer.data)
@@ -442,4 +466,79 @@ class GenerationOrdersView(APIView):
         generation_order = GenerationOrder.objects.create(seminar=seminar)
         serializer = GenerationOrderSerializer(generation_order)
         return MyResponse(data=serializer.data)
+
+
+class TTSOrdersView(APIView):
+    """TTS 转换任务 API"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """获取当前用户的 TTS 任务列表"""
+        orders = TTSOrder.objects.filter(owner=request.user)
+        serializer = TTSOrderSerializer(orders, many=True)
+        return MyResponse(data=serializer.data)
+
+    def post(self, request):
+        """创建 TTS 转换任务"""
+        serializer = TTSOrderCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return MyResponse(code=400, error=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # 创建任务
+        order = TTSOrder.objects.create(
+            text=serializer.validated_data['text'],
+            spk_id=serializer.validated_data['spk_id'],
+            owner=request.user
+        )
+
+        # 发送到消息队列（由 geminar-worker 处理）
+        try:
+            from .tasks import send_tts_order_to_queue
+            send_tts_order_to_queue(order)
+        except Exception as e:
+            order.state = 'failed'
+            order.status = {'error': f'发送任务失败: {str(e)}'}
+            order.save()
+            return MyResponse(code=500, error=f"任务创建失败: {str(e)}", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return MyResponse(data=TTSOrderSerializer(order).data)
+
+
+class TTSOrderDetailView(APIView):
+    """TTS 任务详情 API"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, order_id):
+        """获取 TTS 任务详情"""
+        try:
+            order = TTSOrder.objects.get(id=order_id, owner=request.user)
+        except TTSOrder.DoesNotExist:
+            return MyResponse(code=404, error="任务不存在", status=status.HTTP_404_NOT_FOUND)
+        return MyResponse(data=TTSOrderSerializer(order).data)
+
+
+class TTSOrderCallbackView(APIView):
+    """TTS 任务回调 API（供 worker 调用）"""
+    permission_classes = []  # Worker 内部调用，不需要认证
+
+    def post(self, request, order_id):
+        """更新 TTS 任务状态"""
+        try:
+            order = TTSOrder.objects.get(id=order_id)
+        except TTSOrder.DoesNotExist:
+            return MyResponse(code=404, error="任务不存在", status=status.HTTP_404_NOT_FOUND)
+
+        state = request.data.get('state')
+        status_data = request.data.get('status', {})
+        output_file = request.data.get('output_file', '')
+
+        if state:
+            order.state = state
+        if status_data:
+            order.status = status_data
+        if output_file:
+            order.output_file = output_file
+        order.save()
+
+        return MyResponse(data=TTSOrderSerializer(order).data)
 

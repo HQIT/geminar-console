@@ -129,6 +129,12 @@ CORS_ALLOW_CREDENTIALS = True
 # 是否启用人脸验证（创建讲师时验证上传照片是否为本人）
 FACE_VERIFY_ENABLED = config('FACE_VERIFY_ENABLED', default=True, cast=bool)
 
+# RabbitMQ 配置（用于发送任务到 Worker）
+RABBITMQ_HOST = config('RABBITMQ_HOST', default='localhost')
+RABBITMQ_PORT = config('RABBITMQ_PORT', default=5672, cast=int)
+RABBITMQ_USER = config('RABBITMQ_USER', default='guest')
+RABBITMQ_PASSWORD = config('RABBITMQ_PASSWORD', default='guest')
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer"

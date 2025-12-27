@@ -9,5 +9,9 @@ Pillow
 channels
 websockets
 uvicorn
+celery
 
 django-cors-headers
+
+# TTS (可选，如需 TTS 功能)
+# text-to-speech @ file:../geminar-toolchain/text-to-speech

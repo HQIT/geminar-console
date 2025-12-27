@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Seminar, GenerationOrder, Voice, Avatar, Speaker, AvatarAction
+from .models import Seminar, GenerationOrder, Voice, Avatar, Speaker, AvatarAction, TTSOrder
 
 
 class SeminarSerializer(serializers.ModelSerializer):
@@ -44,4 +44,16 @@ class SpeakerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Speaker
         fields = '__all__'
+
+
+class TTSOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TTSOrder
+        fields = '__all__'
+        read_only_fields = ['id', 'state', 'status', 'output_file', 'owner', 'created_at', 'updated_at']
+
+
+class TTSOrderCreateSerializer(serializers.Serializer):
+    text = serializers.CharField(required=True)
+    spk_id = serializers.CharField(required=True)
 

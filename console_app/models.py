@@ -139,3 +139,40 @@ class GenerationOrder(models.Model):
     def __str__(self):
         return str(self.id)
 
+
+def _default_tts_status():
+    return dict(progress=0, error='')
+
+
+class TTSOrderState(models.TextChoices):
+    PENDING = 'pending', _('等待处理')
+    HANDLING = 'handling', _('处理中')
+    COMPLETED = 'completed', _('已完成')
+    FAILED = 'failed', _('失败')
+
+
+class TTSOrder(models.Model):
+    """TTS 转换任务"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    text = models.TextField(verbose_name='待转换文本')
+    spk_id = models.CharField(max_length=100, verbose_name='音色 ID')
+    state = models.CharField(
+        max_length=20,
+        choices=TTSOrderState.choices,
+        default=TTSOrderState.PENDING,
+        verbose_name='状态'
+    )
+    status = models.JSONField(default=_default_tts_status, verbose_name='状态详情')
+    output_file = models.CharField(max_length=500, blank=True, verbose_name='输出文件路径')
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tts_orders')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True  # 由 console 管理
+        db_table = 'console_ttsorder'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"TTS-{self.id}"
+
